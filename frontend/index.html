@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dead reckoning console — SIH26168</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a111f;
+    --panel: #101a2c;
+    --panel-border: #1f2c42;
+    --text-primary: #e8edf5;
+    --text-muted: #8291a8;
+    --accent-locked: #33d6a6;
+    --accent-lost: #f2a73b;
+    --accent-raw: #e8604f;
+    --accent-truth: #4b5a73;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    padding: 24px;
+  }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  h1 { font-size: 22px; font-weight: 600; margin: 0; }
+  .subtitle { color: var(--text-muted); font-size: 14px; margin-top: 4px; }
+
+  .live-badge {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--text-muted);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-locked); }
+  .dot.pulse { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(51,214,166,0.5); }
+    50% { opacity: 0.6; box-shadow: 0 0 0 6px rgba(51,214,166,0); }
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 720px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .panel-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+
+  .status-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.03);
+    margin-bottom: 16px;
+    font-size: 14px;
+  }
+  .status-row.locked { color: var(--accent-locked); }
+  .status-row.lost { color: var(--accent-lost); }
+
+  .field { margin-bottom: 16px; }
+  .field-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+  .field-value { font-size: 20px; }
+
+  .gauge-row { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+  .gauge-value { font-size: 28px; }
+  .gauge-caption { font-size: 12px; color: var(--text-muted); }
+
+  .legend { display: flex; flex-direction: column; gap: 8px; font-size: 13px; margin-top: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; color: var(--text-muted); }
+  .swatch { width: 16px; height: 2px; }
+
+  .controls { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  button {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--panel-border);
+    color: var(--text-primary);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover { background: rgba(255,255,255,0.09); }
+  button.primary { background: var(--accent-locked); color: #06251c; border-color: transparent; font-weight: 500; }
+
+  .strip-wrap { margin-top: 16px; }
+  .strip { display: flex; gap: 1px; height: 28px; align-items: stretch; overflow: hidden; border-radius: 4px; }
+  .strip .bar { flex: 1 1 auto; min-width: 2px; }
+
+  input[type="text"] {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--panel-border);
+    color: var(--text-primary);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Dead reckoning console</h1>
+    <div class="subtitle">SIH26168 navigation demo</div>
+  </div>
+  <div class="live-badge">
+    <div class="dot pulse" id="liveDot"></div>
+    <span id="liveLabel">Simulated demo</span>
+  </div>
+</header>
+
+<div class="grid">
+  <div class="panel">
+    <div class="panel-label">Position track</div>
+    <svg id="mapSvg" viewBox="0 0 600 340" width="100%" style="display:block;">
+      <line x1="0" y1="1" x2="600" y2="1" stroke="#1f2c42" stroke-width="0"></line>
+    </svg>
+    <div class="legend">
+      <div class="legend-item"><span class="swatch" style="background:var(--accent-truth); height:1px; border-top:2px dashed var(--accent-truth);"></span> Ground truth</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--accent-raw);"></span> Raw dead reckoning</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--accent-locked);"></span> AI + EKF corrected</div>
+    </div>
+    <div class="controls">
+      <button class="primary" id="playBtn">Pause</button>
+      <button id="restartBtn">Restart</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-label">Telemetry</div>
+    <div class="status-row locked" id="statusRow">
+      <div class="dot" id="statusDot" style="background: var(--accent-locked);"></div>
+      <span id="statusText">GNSS locked</span>
+    </div>
+
+    <div class="field">
+      <div class="field-label">Position (corrected)</div>
+      <div class="field-value mono" id="posValue">17.437400, 78.448200</div>
+    </div>
+
+    <div class="gauge-row">
+      <svg width="64" height="64" viewBox="0 0 64 64">
+        <circle cx="32" cy="32" r="26" fill="none" stroke="#1f2c42" stroke-width="6"></circle>
+        <circle id="confArc" cx="32" cy="32" r="26" fill="none" stroke="var(--accent-locked)" stroke-width="6"
+          stroke-dasharray="163.4" stroke-dashoffset="0" stroke-linecap="round"
+          transform="rotate(-90 32 32)"></circle>
+      </svg>
+      <div>
+        <div class="gauge-value mono" id="confValue">100%</div>
+        <div class="gauge-caption">confidence</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="field-label">Drift estimate</div>
+      <div class="field-value mono" id="driftValue">0.0 m</div>
+    </div>
+
+    <div class="strip-wrap">
+      <div class="panel-label">GNSS signal history</div>
+      <div class="strip" id="strip"></div>
+    </div>
+
+    <div class="field" style="margin-top:16px;">
+      <div class="field-label">Connect to your backend</div>
+      <input type="text" id="wsUrl" placeholder="ws://localhost:8000/position/stream/&lt;session_id&gt;">
+      <div class="controls">
+        <button id="connectBtn">Connect to live feed</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const svg = document.getElementById('mapSvg');
+const NS = 'http://www.w3.org/2000/svg';
+const N_STEPS = 140;
+const LOST_START = 45, LOST_END = 80;
+const STRIP_WINDOW = 90;
+
+let truth = [], raw = [], corrected = [], states = [];
+let step = 0, playing = true, timer = null;
+let errorMag = 0;
+
+function truthPointAt(i) {
+  const t = i / N_STEPS;
+  return { x: 40 + t * 520, y: 170 + Math.sin(t * Math.PI * 2.4) * 90 };
+}
+
+function reset() {
+  truth = []; raw = []; corrected = []; states = [];
+  step = 0; errorMag = 0;
+  svg.querySelectorAll('polyline, circle.marker').forEach(el => el.remove());
+  document.getElementById('strip').innerHTML = '';
+}
+
+function advance() {
+  if (step >= N_STEPS) { reset(); }
+  const t = truthPointAt(step);
+  const lost = step >= LOST_START && step <= LOST_END;
+  states.push(lost ? 'lost' : 'locked');
+
+  errorMag = lost ? Math.min(errorMag + 0.6, 40) : Math.max(errorMag - 2.5, 0);
+
+  const biasX = 0.55, biasY = 0.75;
+  const jitter = () => (Math.random() - 0.5) * 3;
+
+  raw.push({ x: t.x + biasX * errorMag + jitter(), y: t.y + biasY * errorMag + jitter() });
+  corrected.push({ x: t.x + biasX * errorMag * 0.22 + jitter() * 0.3, y: t.y + biasY * errorMag * 0.22 + jitter() * 0.3 });
+  truth.push(t);
+
+  render();
+  step++;
+}
+
+function pointsToStr(arr) { return arr.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '); }
+
+function ensurePolyline(id, stroke, width, dash) {
+  let el = svg.querySelector(`#${id}`);
+  if (!el) {
+    el = document.createElementNS(NS, 'polyline');
+    el.setAttribute('id', id);
+    el.setAttribute('fill', 'none');
+    el.setAttribute('stroke', stroke);
+    el.setAttribute('stroke-width', width);
+    if (dash) el.setAttribute('stroke-dasharray', dash);
+    el.setAttribute('stroke-linejoin', 'round');
+    el.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(el);
+  }
+  return el;
+}
+
+function render() {
+  ensurePolyline('truthLine', '#4b5a73', 1.5, '4 4').setAttribute('points', pointsToStr(truth));
+  ensurePolyline('rawLine', '#e8604f', 1.5).setAttribute('points', pointsToStr(raw));
+  ensurePolyline('corrLine', '#33d6a6', 2).setAttribute('points', pointsToStr(corrected));
+
+  let marker = svg.querySelector('circle.marker');
+  if (!marker) {
+    marker = document.createElementNS(NS, 'circle');
+    marker.setAttribute('class', 'marker');
+    marker.setAttribute('r', 5);
+    svg.appendChild(marker);
+  }
+  const last = corrected[corrected.length - 1];
+  marker.setAttribute('cx', last.x);
+  marker.setAttribute('cy', last.y);
+  const lost = states[states.length - 1] === 'lost';
+  marker.setAttribute('fill', lost ? '#f2a73b' : '#33d6a6');
+
+  const driftM = (errorMag * 0.22) * 2.4;
+  const confidence = Math.max(0, Math.min(1, 1 - driftM / 50));
+
+  document.getElementById('driftValue').textContent = driftM.toFixed(1) + ' m';
+  document.getElementById('confValue').textContent = Math.round(confidence * 100) + '%';
+  const circumference = 163.4;
+  document.getElementById('confArc').setAttribute('stroke-dashoffset', circumference * (1 - confidence));
+  document.getElementById('confArc').setAttribute('stroke', lost ? '#f2a73b' : '#33d6a6');
+
+  const lat = (17.4374 + (last.y - 170) * 0.00003).toFixed(6);
+  const lng = (78.4482 + (last.x - 300) * 0.00003).toFixed(6);
+  document.getElementById('posValue').textContent = `${lat}, ${lng}`;
+
+  const statusRow = document.getElementById('statusRow');
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  statusRow.className = 'status-row ' + (lost ? 'lost' : 'locked');
+  statusDot.style.background = lost ? '#f2a73b' : '#33d6a6';
+  statusText.textContent = lost ? 'GNSS lost — AI fallback active' : 'GNSS locked';
+
+  const strip = document.getElementById('strip');
+  const windowStates = states.slice(-STRIP_WINDOW);
+  strip.innerHTML = windowStates.map(s =>
+    `<div class="bar" style="background:${s === 'lost' ? '#f2a73b' : '#33d6a6'}"></div>`
+  ).join('');
+}
+
+function loop() { if (playing) advance(); }
+
+document.getElementById('playBtn').addEventListener('click', (e) => {
+  playing = !playing;
+  e.target.textContent = playing ? 'Pause' : 'Play';
+});
+document.getElementById('restartBtn').addEventListener('click', reset);
+
+document.getElementById('connectBtn').addEventListener('click', () => {
+  const url = document.getElementById('wsUrl').value.trim();
+  if (!url) return;
+  try {
+    const ws = new WebSocket(url);
+    ws.onopen = () => {
+      playing = false;
+      document.getElementById('liveLabel').textContent = 'Live backend feed';
+      document.getElementById('liveDot').style.background = '#33d6a6';
+    };
+    ws.onmessage = (msg) => {
+      const data = JSON.parse(msg.data);
+      document.getElementById('posValue').textContent = `${data.corrected_lat}, ${data.corrected_lng}`;
+      document.getElementById('driftValue').textContent = data.drift_estimate_m.toFixed(1) + ' m';
+      document.getElementById('confValue').textContent = Math.round(data.confidence * 100) + '%';
+      const lost = !data.gnss_available;
+      document.getElementById('statusRow').className = 'status-row ' + (lost ? 'lost' : 'locked');
+      document.getElementById('statusText').textContent = lost ? 'GNSS lost — AI fallback active' : 'GNSS locked';
+    };
+    ws.onerror = () => { alert('Could not connect. Check the backend is running and the session ID is correct.'); };
+  } catch (err) {
+    alert('Invalid WebSocket URL.');
+  }
+});
+
+timer = setInterval(loop, 150);
+advance();
+</script>
+
+</body>
+</html>
